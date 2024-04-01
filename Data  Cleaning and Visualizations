@@ -1,0 +1,311 @@
+
+#Step 1. 
+setwd("/Users/ariel/Downloads/ECON_106 2/Research Project/04_final_paper/00_data")
+library(tidyverse)
+library(dplyr)
+library(conflicted)
+library(sf)
+library(rnaturalearth) 
+library(rnaturalearthdata)
+library(ggplot2)
+
+# Original data : 
+startups<-read_csv("CAX_Startup_Data.csv")
+
+
+continents_data <- st_read("continents.shp")
+
+
+  
+# Data Clean up 
+#main dataset, startups by industry
+
+condensed_startups <- startups %>%
+  select("Company_Name",
+         "Dependent-Company Status",
+         "Industry of company",
+         "year of founding",
+         "Age of company in years",
+         "Employee Count",
+         "Continent of company",
+         "Number of of advisors",
+         "Number of  Sales Support material",
+         "Have been part of successful startups in the past?",
+         "Experience in Fortune 100 organizations",
+         "Product or service company?",
+         "Number of  of Partners of company",
+         
+  )
+
+startups_by_industry <- condensed_startups %>% separate_rows(`Industry of company`,
+                                          sep="\\|")
+
+startups_by_industry <- startups_by_industry %>% separate_rows(`Industry of company`,
+                                                                 sep="/")
+
+###############################################################################
+###############################################################################
+
+# Analyzing Industry & Succes Rate 
+
+  industries_condensed<-startups_by_industry%>%
+    mutate(industry=fct_lump(`Industry of company`, n=4))
+  
+ summary(industries_condensed$industry)
+ 
+
+ 
+ organized_ind_var <- industries_condensed %>%
+   select("Company_Name", "Dependent-Company Status","industry") %>% 
+   group_by(`industry`) %>%
+   count(`Dependent-Company Status`) %>%
+   filter(!is.na (`industry`))
+ 
+
+ ggplot(data = organized_ind_var, 
+        mapping=aes(x = `industry`, y = n), stat = "identity") + 
+   geom_col(aes(fill= `Dependent-Company Status`),position="fill",color = "black") + 
+   labs(
+     title = "On average analytics startup are the most successful by industry",  
+     fill = "Success Status",
+     x = "Industry",
+     y = "Proportion of Startups"  
+   ) + 
+   theme_minimal() + 
+   scale_fill_manual(values = c("skyblue", "pink"),
+                     labels = c("Failed", "Succeded")) 
+
+ ###############################################################################
+ ############################################################################### 
+ 
+ # Analyzing Continent & Success Rate 
+ 
+organized_cont_var <- industries_condensed %>%
+   select("Company_Name", "Dependent-Company Status","industry","Continent of company") %>% 
+   group_by(`Dependent-Company Status`) %>%
+   count(`Continent of company`) %>%
+   filter(!is.na (`Continent of company`))
+ 
+ 
+ world <- ne_countries(scale = "medium", returnclass = "sf")
+ 
+ 
+ map_data <- left_join(world, organized_cont_var, by = c("continent" = "Continent of company"))
+ 
+ 
+ map_data <- map_data %>%
+   mutate(n = replace_na(n, 0))
+ 
+ 
+ ggplot(map_data, aes(fill = n)) +
+   geom_sf() +
+   scale_fill_gradient(name = "Number of Companies",
+                       low = "lightblue",
+                       high = "lightgreen") +
+   labs(title = "Number of Startups by Continent") +
+   theme_void()
+ 
+
+ 
+ggplot(map_data, aes(fill = n)) +
+   geom_sf() +
+   scale_fill_gradient(name = "Number of Companies") +
+   labs(title = "Number of Companies by Continent") +
+   theme_void()
+ 
+ ggplot(data = organized_cont_var, 
+        mapping=aes(x = `Continent of company`, y = n), stat = "identity") + 
+   geom_col(aes(fill= `Dependent-Company Status`),position="fill",color = "black") + 
+ labs(
+   title = "Startup Success Rate by Continent",  
+   fill = "Startup Success Status",
+   x = "Continent",
+   y = "Number of Startups"  
+ ) + 
+   theme_minimal() + 
+   scale_fill_manual(values = c("lightgreen", "white"),
+                     labels = c("Failed", "Succeded")) 
+ 
+ continent_freq_table <- industries_condensed %>%
+   group_by(`Continent of company`, `Dependent-Company Status`) %>%
+   summarise(count = n()) %>%
+   ungroup() %>%
+   spread(`Dependent-Company Status`, count, fill = 0)
+ 
+ 
+ View(continent_freq_table)
+ 
+ 
+ 
+ ###############################################################################
+ ############################################################################### 
+ 
+ #Success rate by Service or product
+
+ 
+ colors <- palette("Dark2")
+ 
+
+ # Plot the bar plot with reordered levels
+ ggplot(data = industries_condensed[!(industries_condensed$`Product or service company?` == "No Info"), ], 
+        mapping = aes(x = reorder(`Product or service company?`, 
+                                  -table(`Product or service company?`)[`Product or service company?`]), 
+                      fill = `Dependent-Company Status`)) + 
+   geom_bar(position = "fill") +
+   labs(title = "Startups that are both products and services have a higher succes rate",
+        x = "Product or Service Company",
+        y = "Proportion",
+        fill = "Success Status") +
+   theme_minimal() +
+   scale_fill_manual(values = colors)
+ 
+ 
+
+ ###############################################################################
+ ############################################################################### 
+ 
+ #Success rate by partners
+ 
+ success_by_partners <- industries_condensed %>%
+   select("Company_Name", "Dependent-Company Status","Number of  of Partners of company") 
+
+ ggplot(data = success_by_partners, 
+        mapping=aes(x = `Number of  of Partners of company`)) + 
+   geom_bar(aes(fill= `Dependent-Company Status`),position="fill") +
+   labs(title = " Startups succes rate by amount of partners",
+        x = "Average Amount of Partners",
+        y = "Proportion",
+        fill = "Success Status") +
+   theme_minimal() +
+   scale_fill_manual(values = colors)
+ 
+
+ partners_freq_table <- industries_condensed %>%
+   group_by(`Number of  of Partners of company`, `Dependent-Company Status`) %>%
+   summarise(count = n()) %>%
+   ungroup() %>%
+   spread(`Dependent-Company Status`, count, fill = 0)
+ 
+ # View the frequency table
+ View( partners_freq_table)
+ 
+  # Create density plot
+ ggplot(data = industries_condensed, 
+        mapping = aes(x = `Number of  of Partners of company`, fill = `Dependent-Company Status`)) + 
+   geom_density(alpha = 0.5, color = "black")
+ 
+ 
+ 
+ ###############################################################################
+ ############################################################################### 
+ #qual
+ 
+ #Success rate by experince 
+ 
+
+ ggplot(data = industries_condensed, 
+        mapping=aes(x = `Experience in Fortune 100 organizations`)) + 
+   geom_bar(aes(fill= `Dependent-Company Status`),position="fill") +
+ labs(title = "Startups succes rate by experince in a Fortune 100 organizations",
+      x = "Product or Service Company",
+      y = "Proportion",
+      fill = "Success Status") +
+   theme_minimal() +
+   scale_fill_manual(values = colors)
+ 
+ ###############################################################################
+ ############################################################################### 
+ #qual
+ 
+ #Success rate by experince in a successful startup before starting
+ 
+ 
+ ggplot(data = industries_condensed, 
+        mapping=aes(x = `Have been part of successful startups in the past?`)) + 
+   geom_bar(aes(fill= `Dependent-Company Status`),position="fill") +
+   labs(
+     title = "Startup Success Rate by Prior Succesful Startup Experience",
+     x = "Have been part of successful startups in the past?",
+     y = "Proportion",
+     fill = " Succes Status"
+   ) +
+   scale_fill_manual(values = c("skyblue", "pink"),
+                     labels = c("Failed", "Succeded")) +
+   theme_minimal()
+ 
+ 
+ ###############################################################################
+ ############################################################################### 
+ 
+ #Success rate by Age 
+ 
+ 
+ # Filter data for successful and failed companies
+ success_data <- industries_condensed %>%
+   filter(`Dependent-Company Status` == "Success") %>%
+   mutate(`Age of company in years` = as.numeric(`Age of company in years`))
+ 
+ failed_data <- industries_condensed %>%
+   filter(`Dependent-Company Status` == "Failed") %>%
+   mutate(`Age of company in years` = as.numeric(`Age of company in years`))
+ 
+ # Plot density for successful and failed companies
+ ggplot() +
+   geom_density(data = success_data, aes(x = `Age of company in years`), color = "turquoise", fill = "turquoise", alpha = 0.5) +
+   geom_density(data = failed_data, aes(x = `Age of company in years`), color = "pink", fill = "pink", alpha = 0.5) +
+   labs(title = "Density Curves Reveal Younger Company Ages for Successful Firms Compared to Failed Ones",
+        x = "Age of Company (years)",
+        y = "Density",
+        fill = "Dependent-Company Status") +
+   scale_fill_manual(values = c("turquoise" = "turquoise", "pink" = "pink"),
+                     labels = c("Success", "Failed"))
+ 
+ 
+ ###############################################################################
+ ############################################################################### 
+ 
+ #Success rate by employee count 
+ 
+ count_analysis <- industries_condensed  %>%
+   select("Company_Name",
+          "Dependent-Company Status",
+          "Employee Count") %>%
+   group_by(`Dependent-Company Status`) %>% 
+   mutate(`Employee Count` = as.numeric(`Employee Count`)) %>%
+   summarize(mean_ec=mean(`Employee Count`, na.rm=TRUE),
+             sd_tv=sd(`Employee Count`, na.rm=TRUE))
+   
+ ggplot(data=count_analysis,
+        mapping=aes(x=`Dependent-Company Status`, y=mean_ec))+
+   geom_col(aes(fill=`Dependent-Company Status`)) +
+   geom_text(aes(label = round(mean_ec, 2)), vjust = -0.5, size = 3) +
+   labs(title = "On average companyes that had more employees succeded more often",
+        x = "Succeded or Failed",
+        y = "Mean Value",
+        fill = "Succes Status")
+   
+ ###############################################################################
+ ############################################################################### 
+ 
+ #Success rate by number of advisors  
+ 
+ 
+ advisors_analysis <- industries_condensed  %>%
+   select("Company_Name",
+          "Dependent-Company Status",
+          "Number of of advisors") #%>%
+   group_by(`Dependent-Company Status`) %>% 
+   mutate(`Number of of advisors` = as.numeric(`Number of of advisors`)) %>%
+   summarize(mean_advisorsc=mean(`Number of of advisors`, na.rm=TRUE),
+             sd_tv=sd(`Number of of advisors`, na.rm=TRUE))
+   
+   
+   ggplot(data = advisors_analysis, 
+          aes(x = `Number of of advisors`)) +
+     geom_histogram(binwidth = 1, fill = "skyblue", color = "black", alpha = 0.7) +
+     labs(title = "Histogram of Number of Advisors for Successful Companies",
+          x = "Number of Advisors",
+          y = "Frequency")
+   
+   
+   
